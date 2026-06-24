@@ -790,4 +790,39 @@ jobs:
         fi
         
         # themes.xml
-        if [ ! -f "app/src/main/res/values/themes.xml" ];
+        if [ ! -f "app/src/main/res/values/themes.xml" ]; then
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+        <resources>
+            <style name="Theme.AppCompat.Light.DarkActionBar" parent="Theme.AppCompat.Light.DarkActionBar" />
+        </resources>
+        EOF
+        fi
+        
+        echo "✅ All files verified and created if needed!"
+        echo "🔨 Starting Gradle build..."
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew || true
+
+    - name: Build APK
+      run: |
+        # Попытка 1: Стандартная сборка
+        if ./gradlew assembleDebug; then
+          echo "✅ Build successful!"
+        else
+          echo "⚠️ Build failed, trying fix..."
+          # Попытка 2: Сборка с очисткой
+          ./gradlew clean assembleDebug || {
+            echo "⚠️ Still failing, trying with gradle wrapper init..."
+            # Попытка 3: Создаём wrapper заново
+            gradle wrapper
+            ./gradlew clean assembleDebug
+          }
+        fi
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: MyGallery
+        path: app/build/outputs/apk/debug/*.apk
