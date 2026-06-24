@@ -1,4 +1,4 @@
-name: Build APK (Self-Healing)
+name: Build APK (Final Fix)
 
 on:
   push:
@@ -18,24 +18,23 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Fix and Build
+    - name: Create all necessary files
       run: |
-        echo "🔧 STARTING SELF-HEALING BUILD..."
+        echo "🔧 CREATING ALL FILES..."
         
-        # Проверяем и создаём корневые файлы
-        echo "📁 Checking root files..."
-        
-        # build.gradle
-        if [ ! -f "build.gradle" ]; then
-          echo "⚠️  build.gradle not found! Creating..."
-          cat > build.gradle << 'EOF'
+        # Создаём корневой build.gradle (упрощённая версия)
+        cat > build.gradle << 'EOF'
         buildscript {
-            repositories { google(); mavenCentral() }
+            repositories {
+                google()
+                mavenCentral()
+            }
             dependencies {
                 classpath 'com.android.tools.build:gradle:8.2.2'
                 classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"
             }
         }
+        
         allprojects {
             repositories {
                 google()
@@ -43,17 +42,14 @@ jobs:
                 maven { url 'https://jitpack.io' }
             }
         }
-        tasks.register('clean', Delete) { delete rootProject.buildDir }
-        EOF
-        fi
         
-        # settings.gradle
-        if [ ! -f "settings.gradle" ]; then
-          echo "⚠️  settings.gradle not found! Creating..."
-          cat > settings.gradle << 'EOF'
-        pluginManagement {
-            repositories { google(); mavenCentral(); gradlePluginPortal() }
+        tasks.register('clean', Delete) {
+            delete rootProject.buildDir
         }
+        EOF
+        
+        # Создаём settings.gradle (без конфликтов)
+        cat > settings.gradle << 'EOF'
         dependencyResolutionManagement {
             repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
             repositories {
@@ -65,32 +61,27 @@ jobs:
         rootProject.name = "MyGallery"
         include ':app'
         EOF
-        fi
         
-        # gradle.properties
-        if [ ! -f "gradle.properties" ]; then
-          echo "⚠️  gradle.properties not found! Creating..."
-          cat > gradle.properties << 'EOF'
+        # Создаём gradle.properties
+        cat > gradle.properties << 'EOF'
         org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
         android.useAndroidX=true
         android.enableJetifier=true
         kotlin.code.style=official
         EOF
-        fi
         
-        # Проверяем app/build.gradle
-        echo "📁 Checking app files..."
-        if [ ! -f "app/build.gradle" ]; then
-          echo "⚠️  app/build.gradle not found! Creating..."
-          mkdir -p app
-          cat > app/build.gradle << 'EOF'
+        # Создаём app/build.gradle
+        mkdir -p app
+        cat > app/build.gradle << 'EOF'
         plugins {
             id 'com.android.application'
             id 'org.jetbrains.kotlin.android'
         }
+        
         android {
             namespace 'com.example.mygallery'
             compileSdk 34
+        
             defaultConfig {
                 applicationId "com.example.mygallery"
                 minSdk 24
@@ -98,6 +89,7 @@ jobs:
                 versionCode 1
                 versionName "1.0"
             }
+        
             buildTypes {
                 release {
                     minifyEnabled false
@@ -108,9 +100,14 @@ jobs:
                 sourceCompatibility JavaVersion.VERSION_17
                 targetCompatibility JavaVersion.VERSION_17
             }
-            kotlinOptions { jvmTarget = '17' }
-            buildFeatures { viewBinding true }
+            kotlinOptions {
+                jvmTarget = '17'
+            }
+            buildFeatures {
+                viewBinding true
+            }
         }
+        
         dependencies {
             implementation 'androidx.core:core-ktx:1.12.0'
             implementation 'androidx.appcompat:appcompat:1.6.1'
@@ -122,13 +119,10 @@ jobs:
             implementation 'com.github.burhanrashid52:PhotoEditor:2.0.0'
         }
         EOF
-        fi
         
-        # Проверяем AndroidManifest.xml
-        if [ ! -f "app/src/main/AndroidManifest.xml" ]; then
-          echo "⚠️  AndroidManifest.xml not found! Creating..."
-          mkdir -p app/src/main
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
+        # Создаём AndroidManifest.xml
+        mkdir -p app/src/main
+        cat > app/src/main/AndroidManifest.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -146,18 +140,18 @@ jobs:
             </application>
         </manifest>
         EOF
-        fi
         
-        # Проверяем наличие Java файлов
-        echo "📁 Checking Java/Kotlin files..."
+        # Создаём Java файлы
+        mkdir -p app/src/main/java/com/example/mygallery
         
-        # MainActivity.kt
-        if [ ! -f "app/src/main/java/com/example/mygallery/MainActivity.kt" ]; then
-          echo "⚠️  MainActivity.kt not found! Creating..."
-          mkdir -p app/src/main/java/com/example/mygallery
-          cat > app/src/main/java/com/example/mygallery/MainActivity.kt << 'EOF'
+        cat > app/src/main/java/com/example/mygallery/MediaItem.kt << 'EOF'
         package com.example.mygallery
+        enum class MediaType { IMAGE, VIDEO }
+        data class MediaItem(val id: Long, val path: String, val dateTaken: Long, val type: MediaType, val displayName: String = "")
+        EOF
         
+        cat > app/src/main/java/com/example/mygallery/MainActivity.kt << 'EOF'
+        package com.example.mygallery
         import android.Manifest
         import android.content.pm.PackageManager
         import android.os.Build
@@ -172,34 +166,27 @@ jobs:
         import java.io.File
         import java.text.SimpleDateFormat
         import java.util.*
-        
         class MainActivity : AppCompatActivity() {
             private lateinit var recyclerView: RecyclerView
             private lateinit var adapter: MediaAdapter
             private val mediaItems = mutableListOf<MediaItem>()
             private val groupedItems = mutableListOf<Pair<String, List<MediaItem>>>()
-        
-            private val requestPermissionLauncher = registerForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { permissions ->
+            private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 if (permissions.values.all { it }) loadMedia()
                 else Toast.makeText(this, "Нужны разрешения", Toast.LENGTH_SHORT).show()
             }
-        
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
                 setContentView(R.layout.activity_main)
                 setupRecyclerView()
                 checkPermissions()
             }
-        
             private fun setupRecyclerView() {
                 recyclerView = findViewById(R.id.recyclerView)
                 recyclerView.layoutManager = LinearLayoutManager(this)
                 adapter = MediaAdapter(groupedItems) { FullscreenActivity.start(this, it) }
                 recyclerView.adapter = adapter
             }
-        
             private fun checkPermissions() {
                 val permissions = mutableListOf<String>()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -214,7 +201,6 @@ jobs:
                 if (permissions.isNotEmpty()) requestPermissionLauncher.launch(permissions.toTypedArray())
                 else loadMedia()
             }
-        
             private fun loadMedia() {
                 mediaItems.clear(); groupedItems.clear()
                 loadImages(); loadVideos()
@@ -222,7 +208,6 @@ jobs:
                 groupByDate()
                 adapter.notifyDataSetChanged()
             }
-        
             private fun loadImages() {
                 val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DISPLAY_NAME)
                 contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null)?.use { cursor ->
@@ -236,7 +221,6 @@ jobs:
                     }
                 }
             }
-        
             private fun loadVideos() {
                 val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DATA, MediaStore.Video.Media.DATE_TAKEN, MediaStore.Video.Media.DISPLAY_NAME)
                 contentResolver.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, null)?.use { cursor ->
@@ -250,7 +234,6 @@ jobs:
                     }
                 }
             }
-        
             private fun groupByDate() {
                 val dateFormat = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
                 val today = Calendar.getInstance()
@@ -273,28 +256,11 @@ jobs:
                     }
                 }.map { Pair(it.key, it.value) })
             }
-        
             override fun onResume() { super.onResume(); if (::adapter.isInitialized) loadMedia() }
         }
         EOF
-        fi
         
-        # MediaItem.kt
-        if [ ! -f "app/src/main/java/com/example/mygallery/MediaItem.kt" ]; then
-          echo "⚠️  MediaItem.kt not found! Creating..."
-          mkdir -p app/src/main/java/com/example/mygallery
-          cat > app/src/main/java/com/example/mygallery/MediaItem.kt << 'EOF'
-        package com.example.mygallery
-        enum class MediaType { IMAGE, VIDEO }
-        data class MediaItem(val id: Long, val path: String, val dateTaken: Long, val type: MediaType, val displayName: String = "")
-        EOF
-        fi
-        
-        # MediaAdapter.kt
-        if [ ! -f "app/src/main/java/com/example/mygallery/MediaAdapter.kt" ]; then
-          echo "⚠️  MediaAdapter.kt not found! Creating..."
-          mkdir -p app/src/main/java/com/example/mygallery
-          cat > app/src/main/java/com/example/mygallery/MediaAdapter.kt << 'EOF'
+        cat > app/src/main/java/com/example/mygallery/MediaAdapter.kt << 'EOF'
         package com.example.mygallery
         import android.view.LayoutInflater
         import android.view.View
@@ -347,15 +313,9 @@ jobs:
             }
         }
         EOF
-        fi
         
-        # FullscreenActivity.kt
-        if [ ! -f "app/src/main/java/com/example/mygallery/FullscreenActivity.kt" ]; then
-          echo "⚠️  FullscreenActivity.kt not found! Creating..."
-          mkdir -p app/src/main/java/com/example/mygallery
-          cat > app/src/main/java/com/example/mygallery/FullscreenActivity.kt << 'EOF'
+        cat > app/src/main/java/com/example/mygallery/FullscreenActivity.kt << 'EOF'
         package com.example.mygallery
-        
         import android.content.Intent
         import android.net.Uri
         import android.os.Bundle
@@ -367,13 +327,11 @@ jobs:
         import com.bumptech.glide.Glide
         import com.github.chrisbanes.photoview.PhotoView
         import java.io.File
-        
         class FullscreenActivity : AppCompatActivity() {
             private lateinit var photoView: PhotoView
             private lateinit var btnDelete: Button
             private lateinit var btnEdit: Button
             private lateinit var mediaItem: MediaItem
-        
             companion object {
                 fun start(activity: MainActivity, mediaItem: MediaItem) {
                     val intent = Intent(activity, FullscreenActivity::class.java)
@@ -381,7 +339,6 @@ jobs:
                     activity.startActivity(intent)
                 }
             }
-        
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
                 setContentView(R.layout.activity_fullscreen)
@@ -392,7 +349,6 @@ jobs:
                 setupViews()
                 setupButtons()
             }
-        
             private fun setupViews() {
                 if (mediaItem.type == MediaType.VIDEO) {
                     val uri = Uri.fromFile(File(mediaItem.path))
@@ -404,16 +360,13 @@ jobs:
                 }
                 Glide.with(this).load(File(mediaItem.path)).into(photoView)
             }
-        
             private fun setupButtons() {
                 btnDelete.setOnClickListener { showDeleteDialog() }
                 btnEdit.setOnClickListener { EditorActivity.start(this, mediaItem.path) }
             }
-        
             private fun showDeleteDialog() {
                 AlertDialog.Builder(this).setTitle("Удалить файл").setMessage("Вы уверены?").setPositiveButton("Удалить") { _, _ -> deleteFile() }.setNegativeButton("Отмена", null).show()
             }
-        
             private fun deleteFile() {
                 try {
                     val uri = if (mediaItem.type == MediaType.IMAGE) MediaStore.Images.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
@@ -426,15 +379,9 @@ jobs:
             }
         }
         EOF
-        fi
         
-        # EditorActivity.kt
-        if [ ! -f "app/src/main/java/com/example/mygallery/EditorActivity.kt" ]; then
-          echo "⚠️  EditorActivity.kt not found! Creating..."
-          mkdir -p app/src/main/java/com/example/mygallery
-          cat > app/src/main/java/com/example/mygallery/EditorActivity.kt << 'EOF'
+        cat > app/src/main/java/com/example/mygallery/EditorActivity.kt << 'EOF'
         package com.example.mygallery
-        
         import android.content.ContentValues
         import android.content.Intent
         import android.graphics.Bitmap
@@ -455,7 +402,6 @@ jobs:
         import com.burhanrashid52.photoeditor.PhotoEditorView
         import java.io.File
         import java.io.FileOutputStream
-        
         class EditorActivity : AppCompatActivity() {
             private lateinit var photoEditorView: PhotoEditorView
             private lateinit var photoEditor: PhotoEditor
@@ -470,7 +416,6 @@ jobs:
             private var imagePath: String = ""
             private var currentColor: Int = Color.RED
             private var isBrushMode = false
-        
             companion object {
                 fun start(activity: FullscreenActivity, path: String) {
                     val intent = Intent(activity, EditorActivity::class.java)
@@ -478,7 +423,6 @@ jobs:
                     activity.startActivity(intent)
                 }
             }
-        
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
                 setContentView(R.layout.activity_editor)
@@ -487,7 +431,6 @@ jobs:
                 setupPhotoEditor()
                 setupButtons()
             }
-        
             private fun initViews() {
                 photoEditorView = findViewById(R.id.photoEditorView)
                 btnSave = findViewById(R.id.btnSave)
@@ -499,12 +442,10 @@ jobs:
                 btnAddText = findViewById(R.id.btnAddText)
                 colorPicker = findViewById(R.id.colorPicker)
             }
-        
             private fun setupPhotoEditor() {
                 photoEditor = PhotoEditor.Builder(this, photoEditorView).setPinchTextScalable(true).build()
                 photoEditorView.source.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imagePath))
             }
-        
             private fun setupButtons() {
                 colorPicker.setOnClickListener { showColorPickerDialog() }
                 btnText.setOnClickListener {
@@ -534,7 +475,6 @@ jobs:
                 btnCancel.setOnClickListener { finish() }
                 btnSave.setOnClickListener { saveEditedImage() }
             }
-        
             private fun showColorPickerDialog() {
                 val colors = arrayOf(Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW, Color.CYAN, Color.MAGENTA, Color.BLACK, Color.WHITE)
                 val colorNames = arrayOf("Красный", "Синий", "Зеленый", "Желтый", "Голубой", "Фиолетовый", "Черный", "Белый")
@@ -544,7 +484,6 @@ jobs:
                     if (isBrushMode) photoEditor.setBrushColor(currentColor)
                 }.show()
             }
-        
             private fun saveEditedImage() {
                 try {
                     val bitmap = photoEditorView.source.getBitmap() ?: return
@@ -570,15 +509,11 @@ jobs:
             }
         }
         EOF
-        fi
         
-        # Проверяем XML файлы
-        echo "📁 Checking XML layout files..."
+        # Создаём XML layout файлы
+        mkdir -p app/src/main/res/layout
         
-        # activity_main.xml
-        if [ ! -f "app/src/main/res/layout/activity_main.xml" ]; then
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+        cat > app/src/main/res/layout/activity_main.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
             xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -593,12 +528,8 @@ jobs:
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
         EOF
-        fi
         
-        # item_header.xml
-        if [ ! -f "app/src/main/res/layout/item_header.xml" ]; then
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/item_header.xml << 'EOF'
+        cat > app/src/main/res/layout/item_header.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <TextView xmlns:android="http://schemas.android.com/apk/res/android"
             android:id="@+id/headerText"
@@ -609,12 +540,8 @@ jobs:
             android:textStyle="bold"
             android:textColor="#2196F3" />
         EOF
-        fi
         
-        # item_media.xml
-        if [ ! -f "app/src/main/res/layout/item_media.xml" ]; then
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/item_media.xml << 'EOF'
+        cat > app/src/main/res/layout/item_media.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:layout_width="match_parent"
@@ -634,12 +561,8 @@ jobs:
                 android:visibility="gone" />
         </FrameLayout>
         EOF
-        fi
         
-        # activity_fullscreen.xml
-        if [ ! -f "app/src/main/res/layout/activity_fullscreen.xml" ]; then
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/activity_fullscreen.xml << 'EOF'
+        cat > app/src/main/res/layout/activity_fullscreen.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:layout_width="match_parent"
@@ -675,12 +598,8 @@ jobs:
             </LinearLayout>
         </LinearLayout>
         EOF
-        fi
         
-        # activity_editor.xml
-        if [ ! -f "app/src/main/res/layout/activity_editor.xml" ]; then
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/activity_editor.xml << 'EOF'
+        cat > app/src/main/res/layout/activity_editor.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:layout_width="match_parent"
@@ -777,49 +696,29 @@ jobs:
             </LinearLayout>
         </LinearLayout>
         EOF
-        fi
         
-        # strings.xml
-        if [ ! -f "app/src/main/res/values/strings.xml" ]; then
-          mkdir -p app/src/main/res/values
-          cat > app/src/main/res/values/strings.xml << 'EOF'
+        # Создаём values файлы
+        mkdir -p app/src/main/res/values
+        
+        cat > app/src/main/res/values/strings.xml << 'EOF'
         <resources>
             <string name="app_name">Моя Галерея</string>
         </resources>
         EOF
-        fi
         
-        # themes.xml
-        if [ ! -f "app/src/main/res/values/themes.xml" ]; then
-          mkdir -p app/src/main/res/values
-          cat > app/src/main/res/values/themes.xml << 'EOF'
+        cat > app/src/main/res/values/themes.xml << 'EOF'
         <resources>
             <style name="Theme.AppCompat.Light.DarkActionBar" parent="Theme.AppCompat.Light.DarkActionBar" />
         </resources>
         EOF
-        fi
         
-        echo "✅ All files verified and created if needed!"
-        echo "🔨 Starting Gradle build..."
-
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew || true
+        echo "✅ All files created!"
 
     - name: Build APK
       run: |
-        # Попытка 1: Стандартная сборка
-        if ./gradlew assembleDebug; then
-          echo "✅ Build successful!"
-        else
-          echo "⚠️ Build failed, trying fix..."
-          # Попытка 2: Сборка с очисткой
-          ./gradlew clean assembleDebug || {
-            echo "⚠️ Still failing, trying with gradle wrapper init..."
-            # Попытка 3: Создаём wrapper заново
-            gradle wrapper
-            ./gradlew clean assembleDebug
-          }
-        fi
+        echo "🔨 Building APK..."
+        chmod +x gradlew || true
+        ./gradlew clean assembleDebug --no-daemon
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
