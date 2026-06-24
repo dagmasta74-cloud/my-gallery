@@ -1,4 +1,4 @@
-name: Build APK (Final Fix)
+name: Build APK (Direct Gradle)
 
 on:
   push:
@@ -18,11 +18,23 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Create all necessary files
+    - name: Install Gradle
       run: |
-        echo "🔧 CREATING ALL FILES..."
+        wget https://services.gradle.org/distributions/gradle-8.4-bin.zip
+        unzip gradle-8.4-bin.zip
+        echo "$PWD/gradle-8.4/bin" >> $GITHUB_PATH
+
+    - name: Create project files
+      run: |
+        echo "📁 Creating all project files..."
         
-        # Создаём корневой build.gradle (упрощённая версия)
+        # Создаём settings.gradle
+        cat > settings.gradle << 'EOF'
+        rootProject.name = "MyGallery"
+        include ':app'
+        EOF
+        
+        # Создаём build.gradle
         cat > build.gradle << 'EOF'
         buildscript {
             repositories {
@@ -46,20 +58,6 @@ jobs:
         tasks.register('clean', Delete) {
             delete rootProject.buildDir
         }
-        EOF
-        
-        # Создаём settings.gradle (без конфликтов)
-        cat > settings.gradle << 'EOF'
-        dependencyResolutionManagement {
-            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-            repositories {
-                google()
-                mavenCentral()
-                maven { url 'https://jitpack.io' }
-            }
-        }
-        rootProject.name = "MyGallery"
-        include ':app'
         EOF
         
         # Создаём gradle.properties
@@ -141,7 +139,7 @@ jobs:
         </manifest>
         EOF
         
-        # Создаём Java файлы
+        # Создаём Java/Kotlin файлы
         mkdir -p app/src/main/java/com/example/mygallery
         
         cat > app/src/main/java/com/example/mygallery/MediaItem.kt << 'EOF'
@@ -510,7 +508,7 @@ jobs:
         }
         EOF
         
-        # Создаём XML layout файлы
+        # Создаём XML layout
         mkdir -p app/src/main/res/layout
         
         cat > app/src/main/res/layout/activity_main.xml << 'EOF'
@@ -697,7 +695,7 @@ jobs:
         </LinearLayout>
         EOF
         
-        # Создаём values файлы
+        # Создаём values
         mkdir -p app/src/main/res/values
         
         cat > app/src/main/res/values/strings.xml << 'EOF'
@@ -712,13 +710,12 @@ jobs:
         </resources>
         EOF
         
-        echo "✅ All files created!"
+        echo "✅ All project files created successfully!"
 
     - name: Build APK
       run: |
-        echo "🔨 Building APK..."
-        chmod +x gradlew || true
-        ./gradlew clean assembleDebug --no-daemon
+        echo "🔨 Building APK with Gradle..."
+        gradle clean assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
