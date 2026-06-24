@@ -1,4 +1,4 @@
-name: Build APK (Direct Gradle)
+name: Build APK (Final)
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
         include ':app'
         EOF
         
-        # Создаём build.gradle
+        # Создаём build.gradle с правильными репозиториями
         cat > build.gradle << 'EOF'
         buildscript {
             repositories {
@@ -52,6 +52,7 @@ jobs:
                 google()
                 mavenCentral()
                 maven { url 'https://jitpack.io' }
+                maven { url 'https://maven.google.com' }
             }
         }
         
@@ -712,10 +713,12 @@ jobs:
         
         echo "✅ All project files created successfully!"
 
-    - name: Build APK
+    - name: Build APK with retry
       run: |
         echo "🔨 Building APK with Gradle..."
-        gradle clean assembleDebug
+        gradle clean assembleDebug --refresh-dependencies || \
+        gradle clean assembleDebug --no-daemon || \
+        gradle clean assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
